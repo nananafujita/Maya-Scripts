@@ -1,6 +1,63 @@
 import maya.cmds as cmds
 import random
 
+class Building:
+    def __init__(self, x, y, z, w, d, h, s):
+        self.x_pos = x
+        self.y_pos = y
+        self.z_pos = z
+        self.width = w
+        self.depth = d
+        self.height = h
+        self.space = s
+
+    def create_polycube(self):
+        cube = cmds.polyCube(width=self.width, height=self.height, depth=self.depth)
+        cmds.move(self.x_pos, self.y_pos, self.z_pos, worldSpace=True)
+        return cube
+       
+class City:
+    def __init__(self, grid_width, grid_depth, bldg_width, bldg_depth, bldg_height, bldg_spacing):
+        self.grid_width = grid_width  
+        self.grid_depth = grid_depth
+        self.bldg_width = bldg_width        #(min, max)
+        self.bldg_depth = bldg_depth        #(min, max)
+        self.bldg_height = bldg_height      #(min, max)
+        self.bldg_spacing = bldg_spacing
+        self.buildings = []
+
+    def add_building(self, b: Building):
+        self.buildings.append(b)
+    
+    def generate_city(self):
+        z = 0
+        while z < self.grid_depth:
+            if z + self.bldg_depth[0] + self.bldg_spacing > self.grid_depth:
+                break
+            x = 0
+            max_depth = 0
+            while x < self.grid_width:
+                # break if no more buildings with minimum width fit
+                if x + self.bldg_width[0] + self.bldg_spacing > self.grid_width:
+                    break
+                # random value between minimum bldg dimensions, and the either the maximum dimensions or available space
+                width = random.uniform(self.bldg_width[0], min(self.bldg_width[1], self.grid_width - x - self.bldg_spacing))
+                depth = random.uniform(self.bldg_depth[0], min(self.bldg_depth[1], self.grid_depth - z - self.bldg_spacing))
+                height = random.uniform(self.bldg_height[0], self.bldg_height[1])
+                spacing = random.uniform(self.bldg_spacing, self.bldg_spacing * 1.5) # 1.5 is offset value
+                max_depth = max(max_depth, depth)
+
+                # find x and z positions
+                x_pos = (x + width + spacing) / 2
+                z_pos = (z + width + spacing) / 2
+                y_pos = height / 2 
+                building = Building(x_pos, y_pos, z_pos, width, depth, height, spacing)
+                bldg_cube = building.create_polycube()
+                self.add_building(bldg_cube)
+                x += width + spacing
+            z += depth + spacing
+        
+
 class CityGenerator:
     def __init__(self):
         self.city_specs = {
@@ -31,7 +88,7 @@ class CityGenerator:
         self.ui_elements["bldgHeight"] = cmds.floatFieldGrp("bldgHeight", label="Height Min/Max",  numberOfFields=2, value1=self.city_specs["bldgHeight"][0], value2=self.city_specs["bldgHeight"][1])
         self.ui_elements["minSpacing"] = cmds.floatFieldGrp("minSpacing", label="Min Spacing", value1=self.city_specs["minSpacing"])
         
-        cmds.button(label="Generate City", command=lambda *_: self.generate_city())
+        cmds.button(label="Generate City", command=lambda *_: self.on_generate_clicked())
         
         self.ui_elements["message"] = cmds.text(label="", align="right") 
         cmds.showWindow(self.window)
@@ -83,7 +140,7 @@ class CityGenerator:
             message += "Max Building Depth must be less than Grid Depth\n"
             success = False
             
-        if self.city_specs["spacing"] + self.city_specs["bldgDepth"][0] > self.city_specs["gridDepth"]:
+        if self.city_specs["minSpacing"] + self.city_specs["bldgDepth"][0] > self.city_specs["gridDepth"]:
             message += "Spacing + Min Building Depth must be less than Grid Depth\n"
             success = False
         
@@ -95,41 +152,23 @@ class CityGenerator:
         cmds.text(self.ui_elements["message"], edit=True, label=message)
         return success
     
-    def generate_building(self, w, d, h):
+    #def generate_building(self, w, d, h):
         
         
-    def generate_city(self):
+    def on_generate_clicked(self):
         self.update_city_specs()
         success = self.validate_inputs()
         
         if success:
-            gridW = self.city_specs["gridWidth"]
-            gridD = self.city_specs["gridDepth"]
-            minBldgW = self.city_specs["bldgWidth"][0]
-            maxBldgW = self.city_specs["bldgWidth"][1]
-            minBldgD = self.city_specs["bldgDepth"][0]
-            maxBldgD = self.city_specs["bldgDepth"][1]
-            minBldgH = self.city_specs["bldgHeight"][0]
-            maxBldgH = self.city_specs["bldgHeight"][1]
-            minSpace = self.city_specs["minSpacing"]
-            x = 0
-            while x < gridW:
-                if x + minBldgW > gridW:
-                    break
-                maxBldgW = min(maxBldgW, gridW - x) #clamp maxBldgWidth to not exceed grid limits
-                z = 0
-                while z < gridD:
-                    if z + minBldgD > gridD:
-                        break
-                    maxBldgD = min(maxBldgD, gridD - z)
+            city = City(self.city_specs["gridWidth"], 
+                        self.city_specs["gridDepth"],
+                        (self.city_specs["bldgWidth"][0],self.city_specs["bldgWidth"][1]),
+                        (self.city_specs["bldgDepth"][0], self.city_specs["bldgDepth"][1]),
+                        (self.city_specs["bldgHeight"][0], self.city_specs["bldgHeight"][1]),
+                        self.city_specs["minSpacing"])
+            city.generate_city()
+            cmds.text(self.ui_elements["message"], edit=True, label="done generating")
 
-                    bldgW = random.uniform(minBldgW, maxBldgW)
-                    bldgD = random.uniform(minBldgD, maxBldgD)
-                    bldgH = random.uniform(minBldgH, maxBldgH)
-                    space = random.uniform(minSpace, minSpace * 1.5) # add some random offset to spacing
-                    self.generate_building(bldgW, bldgD, bldgH)
-       
-            
-            
+
 window1 = CityGenerator()
 window1.create_ui()
