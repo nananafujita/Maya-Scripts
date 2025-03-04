@@ -2,60 +2,58 @@ import maya.cmds as cmds
 import random
 
 class Building:
-    def __init__(self, x, y, z, w, d, h, s):
+    def __init__(self, x, y, z, w, d, h, n):
         self.x_pos = x
         self.y_pos = y
         self.z_pos = z
         self.width = w
         self.depth = d
         self.height = h
-        self.space = s
-
+        self.name = n
+        
     def create_polycube(self):
-        cube = cmds.polyCube(width=self.width, height=self.height, depth=self.depth)
-        cmds.move(self.x_pos, self.y_pos, self.z_pos, worldSpace=True)
+        cube = cmds.polyCube(width=self.width, height=self.height, depth=self.depth, name=self.name)
+        cmds.move(self.x_pos + self.width / 2, self.y_pos, self.z_pos + self.depth / 2, worldSpace=True)
         return cube
        
 class City:
-    def __init__(self, grid_width, grid_depth, bldg_width, bldg_depth, bldg_height, bldg_spacing):
+    def __init__(self, grid_width, grid_depth, bldg_width, bldg_depth, bldg_height):
         self.grid_width = grid_width  
         self.grid_depth = grid_depth
         self.bldg_width = bldg_width        #(min, max)
         self.bldg_depth = bldg_depth        #(min, max)
         self.bldg_height = bldg_height      #(min, max)
-        self.bldg_spacing = bldg_spacing
         self.buildings = []
 
-    def add_building(self, b: Building):
-        self.buildings.append(b)
+    def add_building(self, b):
+        self.buildings.append(b[0])
     
     def generate_city(self):
         z = 0
+        bldg_count = 0
         while z < self.grid_depth:
-            if z + self.bldg_depth[0] + self.bldg_spacing > self.grid_depth:
+            # adjust last one to fit to the edge of the grid
+            if z + self.bldg_depth[0] > self.grid_depth:
                 break
             x = 0
-            max_depth = 0
+            depth = random.uniform(self.bldg_depth[0], self.bldg_depth[1])
             while x < self.grid_width:
                 # break if no more buildings with minimum width fit
-                if x + self.bldg_width[0] + self.bldg_spacing > self.grid_width:
+                if x + self.bldg_width[0] > self.grid_width:
                     break
-                # random value between minimum bldg dimensions, and the either the maximum dimensions or available space
-                width = random.uniform(self.bldg_width[0], min(self.bldg_width[1], self.grid_width - x - self.bldg_spacing))
-                depth = random.uniform(self.bldg_depth[0], min(self.bldg_depth[1], self.grid_depth - z - self.bldg_spacing))
-                height = random.uniform(self.bldg_height[0], self.bldg_height[1])
-                spacing = random.uniform(self.bldg_spacing, self.bldg_spacing * 1.5) # 1.5 is offset value
-                max_depth = max(max_depth, depth)
 
-                # find x and z positions
-                x_pos = (x + width + spacing) / 2
-                z_pos = (z + width + spacing) / 2
-                y_pos = height / 2 
-                building = Building(x_pos, y_pos, z_pos, width, depth, height, spacing)
+                # random value between minimum bldg dimensions, and the either the maximum dimensions or available space
+                width = random.uniform(self.bldg_width[0], min(self.bldg_width[1], self.grid_width - x))
+                height = random.uniform(self.bldg_height[0], self.bldg_height[1])
+                                
+                bldg_count += 1
+                name = "pCube" + str(bldg_count)
+                building = Building(x, height/2, z, width, depth, height, name)
                 bldg_cube = building.create_polycube()
                 self.add_building(bldg_cube)
-                x += width + spacing
-            z += depth + spacing
+                x += width
+            z += depth
+        cmds.group(self.buildings, name="cityGroup") 
         
 
 class CityGenerator:
@@ -66,7 +64,6 @@ class CityGenerator:
             "bldgWidth": (1.0, 5.0),
             "bldgDepth": (1.0, 5.0),
             "bldgHeight": (1.0, 10.0),
-            "minSpacing": 1.0
         }
         self.window = "CityGenerator"
         self.ui_elements = {}
@@ -86,7 +83,6 @@ class CityGenerator:
         self.ui_elements["bldgWidth"] = cmds.floatFieldGrp("bldgWidth", label="Width Min/Max", numberOfFields=2, value1=self.city_specs["bldgWidth"][0], value2=self.city_specs["bldgWidth"][1])
         self.ui_elements["bldgDepth"] = cmds.floatFieldGrp("bldgDepth", label="Depth Min/Max",  numberOfFields=2, value1=self.city_specs["bldgDepth"][0], value2=self.city_specs["bldgDepth"][1])
         self.ui_elements["bldgHeight"] = cmds.floatFieldGrp("bldgHeight", label="Height Min/Max",  numberOfFields=2, value1=self.city_specs["bldgHeight"][0], value2=self.city_specs["bldgHeight"][1])
-        self.ui_elements["minSpacing"] = cmds.floatFieldGrp("minSpacing", label="Min Spacing", value1=self.city_specs["minSpacing"])
         
         cmds.button(label="Generate City", command=lambda *_: self.on_generate_clicked())
         
@@ -123,25 +119,13 @@ class CityGenerator:
                 if val[0] > val[1]:
                     message += f"{field_name} min must be less than or equal to max\n"
                     success = False
-            '''elif field_name == "minSpacing":
-                if val < 0.0:
-                    message += f"{field_name} must be at least 0.0\n"
-                    success = False'''
                     
-        if self.city_specs["bldgWidth"][1] > self.city_specs["gridWidth"]:
-            message += "Max Building Width must be less than Grid Width\n"
+        if self.city_specs["bldgWidth"][0] > self.city_specs["gridWidth"] or self.city_specs["bldgWidth"][1] > self.city_specs["gridWidth"]:
+            message += "Min and Max Building Width must be less than Grid Width\n"
             success = False
             
-        if self.city_specs["minSpacing"] + self.city_specs["bldgWidth"][0] > self.city_specs["gridWidth"]:
-            message += "Spacing + Min Building Width must be less than Grid Width\n"
-            success = False
-                    
-        if self.city_specs["bldgDepth"][1] > self.city_specs["gridDepth"]:
-            message += "Max Building Depth must be less than Grid Depth\n"
-            success = False
-            
-        if self.city_specs["minSpacing"] + self.city_specs["bldgDepth"][0] > self.city_specs["gridDepth"]:
-            message += "Spacing + Min Building Depth must be less than Grid Depth\n"
+        if self.city_specs["bldgDepth"][0] > self.city_specs["gridDepth"] or self.city_specs["bldgDepth"][1] > self.city_specs["gridDepth"]:
+            message += "Min and Max Building Depth must be less than Grid Depth\n"
             success = False
         
         if success:
@@ -164,8 +148,7 @@ class CityGenerator:
                         self.city_specs["gridDepth"],
                         (self.city_specs["bldgWidth"][0],self.city_specs["bldgWidth"][1]),
                         (self.city_specs["bldgDepth"][0], self.city_specs["bldgDepth"][1]),
-                        (self.city_specs["bldgHeight"][0], self.city_specs["bldgHeight"][1]),
-                        self.city_specs["minSpacing"])
+                        (self.city_specs["bldgHeight"][0], self.city_specs["bldgHeight"][1]))
             city.generate_city()
             cmds.text(self.ui_elements["message"], edit=True, label="done generating")
 
