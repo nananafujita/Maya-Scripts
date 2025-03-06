@@ -36,14 +36,23 @@ class City:
             if z + self.bldg_depth[0] > self.grid_depth:
                 break
             x = 0
-            depth = random.uniform(self.bldg_depth[0], self.bldg_depth[1])
+            remaining_depth = self.grid_depth - z
+            if remaining_depth < self.bldg_depth[1]:
+                depth = remaining_depth
+            else:
+                depth = random.uniform(self.bldg_depth[0], self.bldg_depth[1])
+                
             while x < self.grid_width:
                 # break if no more buildings with minimum width fit
                 if x + self.bldg_width[0] > self.grid_width:
                     break
 
                 # random value between minimum bldg dimensions, and the either the maximum dimensions or available space
-                width = random.uniform(self.bldg_width[0], min(self.bldg_width[1], self.grid_width - x))
+                remaining_width = self.grid_width - x
+                if remaining_width < self.bldg_width[1]:
+                    width = remaining_width
+                else: 
+                    width = random.uniform(self.bldg_width[0], min(self.bldg_width[1], remaining_width))
                 height = random.uniform(self.bldg_height[0], self.bldg_height[1])
                                 
                 bldg_count += 1
